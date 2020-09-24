@@ -1,0 +1,8 @@
+secrets.txt
+downloads/*
+!.gitkeep
+chromedriver
+geckodriver
+*.log
+cpf.txt
+.vscode
