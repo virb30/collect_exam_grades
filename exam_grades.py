@@ -1,12 +1,15 @@
 # -*- encoding: utf-8 -*-
 
 import argparse, sys, os, re, time, glob
+from datetime import date
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 
+BASE_DIR = './downloads'
+DATE_DIR = date.today().strftime("%Y-%m-%d")
 
 def login(driver):
     username=os.environ['USERNAME']
@@ -16,14 +19,13 @@ def login(driver):
     driver.find_element_by_xpath("//input[@type='image']").click()
     driver.implicitly_wait(5)
 
-
-def get_downloaded_files(directory = 'downloads'):
-    directory = os.path.realpath(directory)
+def get_result_files():
+    directory = os.path.realpath(f'{BASE_DIR}/{DATE_DIR}')
     return glob.glob1(directory, "*.txt")
-    
+
 
 def file_exists(search_file):
-    file_list = get_downloaded_files()
+    file_list = get_result_files()
     if search_file in file_list:
         return True
     return False
@@ -58,19 +60,23 @@ def download_response_file(driver):
     driver.implicitly_wait(2)
 
 
-def process_file(input_file = 'cpf.txt'):
+def get_webdriver():
     executable_path = r'.\\chromedriver\\chromedriver.exe'
     chrome_config = {
-        "download.default_directory": os.path.realpath('downloads'),
+        "download.default_directory": os.path.realpath(f'{BASE_DIR}/{DATE_DIR}'),
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True,
         "profile.default_content_setting_values.automatic_downloads": 2,
     }
     options = Options()
-    options.headless = True
+    options.headless = False
     options.add_experimental_option("prefs", chrome_config)    
-    driver = webdriver.Chrome(executable_path=executable_path, options=options)
+    return webdriver.Chrome(executable_path=executable_path, options=options)
+
+
+def process_file(input_file = 'cpf.txt'):
+    driver = get_webdriver()
     open_browser(driver)
     login(driver)
     submenus = [submenu.get_attribute('id') for submenu in driver.find_elements_by_xpath("//div[@id='menugroup_4']/div[not(@id='menugroup_4_1')]")]
@@ -108,10 +114,17 @@ def generate_output_file(args):
     input_file.close()
 
 
+def create_directory(directory):
+    if(not os.path.exists(directory)):
+        os.mkdir(directory)
+
+
 def main():
     try:
         args = extract_args()
         generate_output_file(args)
+        create_directory(BASE_DIR)
+        create_directory(f'{BASE_DIR}/{DATE_DIR}')
         process_file(args.output_file)
         print('Script successful executed')
     except:

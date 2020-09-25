@@ -6,3 +6,5 @@ geckodriver
 *.log
 cpf.txt
 .vscode
+!*example.txt
+*.txt
