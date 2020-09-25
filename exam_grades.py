@@ -105,7 +105,6 @@ def extract_args():
                         help="Defines the column which contains the local id data to compare (default: 1)", default=1, type=int)
     return parser.parse_args()
 
-
 def generate_output_file(args):
     global candidates_dict
 
