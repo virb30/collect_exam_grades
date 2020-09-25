@@ -10,6 +10,7 @@ from selenium.webdriver.common.by import By
 
 BASE_DIR = './downloads'
 DATE_DIR = date.today().strftime("%Y-%m-%d")
+candidates_dict = {}
 
 def login(driver):
     username=os.environ['USERNAME']
@@ -18,6 +19,7 @@ def login(driver):
     driver.find_element_by_id('password').send_keys(password)
     driver.find_element_by_xpath("//input[@type='image']").click()
     driver.implicitly_wait(5)
+
 
 def get_result_files():
     directory = os.path.realpath(f'{BASE_DIR}/{DATE_DIR}')
@@ -96,19 +98,23 @@ def extract_args():
     parser.add_argument('output_file', metavar='output_file', type=str,
                         help='output file path')
     parser.add_argument('--col',
-                        help='Defines from which column the desired data is present (default: 0)', default=0, type=int)
+                        help='Defines the column which contains the remote id data to search (default: 0)', default=0, type=int)
     parser.add_argument('--sep',
                         help='Defines separator character of files (default: ;)', default=';')
+    parser.add_argument('--local_col', 
+                        help="Defines the column which contains the local id data to compare (default: 1)", default=1, type=int)
     return parser.parse_args()
 
-
 def generate_output_file(args):
+    global candidates_dict
+
     input_file = open(args.input_file)
     lines = input_file.readlines()
     with open(args.output_file, mode='w') as output_file:
         for line in lines:
             line_data = line.split(args.sep)
             write_data = re.sub(r'\D', '', line_data[args.col])
+            candidates_dict[write_data] = line_data[args.local_col]
             output_file.write(f'{write_data}\n')
         output_file.close()
     input_file.close()
@@ -119,16 +125,55 @@ def create_directory(directory):
         os.mkdir(directory)
 
 
+def calculate_grade_average(grades):
+    average = sum([float(grade) for grade in grades]) / 4
+    return round(average * 30 / 1000)
+
+
+def calculate_essay_grade(grade):
+    return round(float(grade) / 100)
+
+
+def save_result_to_file(filepath, result, cpf):
+    global candidates_dict
+    subscription = candidates_dict.get(cpf)    
+    with open(filepath, mode='a') as file:
+        file.write(''.join(['X'*40, subscription.zfill(6), 'X'*14, f'{result}\n']))
+        file.close()
+
+
+def calculate_grades(args):
+    export_file_date = date.today().strftime('%d%m%Y')     
+    grades_output = f'{BASE_DIR}/{DATE_DIR}/results/EXP_{export_file_date}_PON.txt'
+    essay_output = f'{BASE_DIR}/{DATE_DIR}/results/EXP_{export_file_date}_RED.txt'
+
+    result_files = get_result_files()
+    for result_file in result_files:
+        with open(f'{BASE_DIR}/{DATE_DIR}/{result_file}') as file:
+            exam_results = file.readlines()
+            for result in exam_results:
+                line_data = result.split(';')
+                cpf = line_data[1]
+                essay_grade = calculate_essay_grade(line_data[7])
+                grades_average = calculate_grade_average(line_data[3:7])
+                if(grades_average > 0 and essay_grade > 0):
+                    save_result_to_file(grades_output, grades_average, cpf)
+                    save_result_to_file(essay_output, essay_grade, cpf)
+            file.close()
+
+
 def main():
     try:
         args = extract_args()
         generate_output_file(args)
         create_directory(BASE_DIR)
         create_directory(f'{BASE_DIR}/{DATE_DIR}')
-        process_file(args.output_file)
+        create_directory(f'{BASE_DIR}/{DATE_DIR}/results')
+        # process_file(args.output_file)
+        calculate_grades(args)
         print('Script successful executed')
-    except:
-        print('Error running script')
+    except Exception as e:
+        print(e)
 
 
 if __name__ == "__main__":
