@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 
 import argparse, sys, os, re, time, glob
-from datetime import date
+from datetime import date, datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
@@ -24,6 +24,9 @@ PASSWORD = os.environ['WS_PASSWORD']
 
 BASE_DIR = './downloads'
 DATE_DIR = date.today().strftime("%Y-%m-%d")
+
+LOG_FILE = './processed_data.log'
+
 candidates_dict = {}
 
 
@@ -60,7 +63,7 @@ def get_webdriver():
         "profile.default_content_setting_values.automatic_downloads": 2,
     }
     options = Options()
-    options.headless = False
+    options.headless = True
     options.add_experimental_option("prefs", chrome_config)    
     return webdriver.Chrome(executable_path=executable_path, options=options)
 
@@ -94,24 +97,29 @@ def upload_request_file(driver, input_file):
 def download_response_file(driver):
     driver.find_element_by_xpath("//div[@id='menugroup_5']/div").click()
     driver.implicitly_wait(1)
-    download_link = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td/div/a")
-    file_name = download_link.get_attribute('href').split('/')[-1]
-    if(not file_exists(file_name)):
-        download_link.click()
-    driver.implicitly_wait(2)
+    last_request = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td[@id='listaSolicitacaoAtendidas:0:j_id160']/div")
+    last_request_date = datetime.strptime(last_request.text, '%d/%m/%Y %H:%M:%S')
+    last_requested_today = last_request_date.date() >= date.today()
+    if(last_requested_today):
+        download_link = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td/div/a")
+        file_name = download_link.get_attribute('href').split('/')[-1]
+        if(not file_exists(file_name)):
+            download_link.click()
+        driver.implicitly_wait(2)
 
 
 def process_file(input_file = 'cpf.txt'):
-    driver = get_webdriver()
-    open_browser(driver)
-    login(driver)
-    submenus = [submenu.get_attribute('id') for submenu in driver.find_elements_by_xpath("//div[@id='menugroup_4']/div[not(@id='menugroup_4_1')]")]
-    for submenu_id in submenus:
-        open_request_form(driver, submenu_id)
-        upload_request_file(driver, input_file)
-        download_response_file(driver)
-    time.sleep(5)
-    driver.quit()
+    if(os.path.getsize(input_file) > 0):
+        driver = get_webdriver()
+        open_browser(driver)
+        login(driver)
+        submenus = [submenu.get_attribute('id') for submenu in driver.find_elements_by_xpath("//div[@id='menugroup_4']/div[not(@id='menugroup_4_1')]")]
+        for submenu_id in submenus:
+            open_request_form(driver, submenu_id)
+            upload_request_file(driver, input_file)
+            download_response_file(driver)
+        time.sleep(5)
+        driver.quit()
 
 
 def extract_args():
@@ -126,17 +134,34 @@ def extract_args():
     return parser.parse_args()
 
 
+def read_processed_registers(): 
+    lines = []
+    if(os.path.exists(LOG_FILE)):
+        log_file = open(LOG_FILE, mode="r+")
+        lines = log_file.read().splitlines()
+        log_file.close()
+    return lines
+
+
+def save_processed_registers(data):
+    with open(LOG_FILE, mode="a") as log_file:
+        log_file.write(f'{data}\n')
+        log_file.close()
+
+
 def generate_request_file():
     global candidates_dict
     args = extract_args()
     input_file = open(args.input_file)
     lines = input_file.readlines()
+    processed_candidates = read_processed_registers()
     with open(args.output_file, mode='w') as output_file:
         for line in lines:
             line_data = line.split(args.sep)
             write_data = re.sub(r'\D', '', line_data[INPUT_FILE_LAYOUT['cpf']])
             candidates_dict[write_data] = line_data[INPUT_FILE_LAYOUT['subscription']]
-            output_file.write(f'{write_data}\n')
+            if(write_data not in processed_candidates):
+                output_file.write(f'{write_data}\n')
         output_file.close()
     input_file.close()
     return args.output_file
@@ -153,7 +178,6 @@ def calculate_essay_grade(grade):
 
 def save_result_to_file(filepath, result, cpf):
     global candidates_dict
-    print(candidates_dict)
     subscription = candidates_dict.get(cpf)    
     with open(filepath, mode='a') as file:
         file.write(''.join(['X'*40, subscription.zfill(6), 'X'*14, f'{result}\n']))
@@ -177,9 +201,10 @@ def calculate_grades():
                 if(grades_average > 0 and essay_grade > 0):
                     save_result_to_file(grades_output, grades_average, cpf)
                     save_result_to_file(essay_output, essay_grade, cpf)
+                    save_processed_registers(cpf)
             file.close()
-
-
+        
+            
 def main():
     try:
         init_directories()
