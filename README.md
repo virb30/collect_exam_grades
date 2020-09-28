@@ -19,7 +19,8 @@ If the user already knows the year the student took the test, its easy and fast 
 What this script do:
 
 - get an input file containing a mass data;
-- extract the relevant portion of it and put into another file
+- extract the relevant portion of it and put into another file;
+  - this will check for a `processed_data.log` file to exclude the already processed candidates from request file
 - access the systems page;
 - login;
 - loops through the available years;
@@ -27,6 +28,7 @@ What this script do:
   - send the request file generated;
   - access the results page;
   - download the results file to the desired location
+    - will compare the last requested date present in the results pages and download only the ones executed at the same date of script execution
 
 # Requirements
 
@@ -50,15 +52,11 @@ Chrome browser & Chromedriver corresponding versions
 
 - Set `WS_USERNAME` and `WS_PASSWORD` environment variables
 
+- Adjust the `INPUT_FILE_LAYOUT` constant to fit needs
+
 - Run command with the desired input and output files
 
 `python ./exam_grades.py <input_file> <output_file>`
-
-## Optional Params
-
-`--col=[int]`: Indicates which column looking for data (default: 0)
-
-`--sep=[str]`: Indicates which separator character to use (default: ';')
 
 # TODO
 
