@@ -108,7 +108,7 @@ def download_response_file(driver):
         driver.implicitly_wait(2)
 
 
-def process_file(input_file = 'cpf.txt'):
+def get_response_files(input_file):
     if(os.path.getsize(input_file) > 0):
         driver = get_webdriver()
         open_browser(driver)
@@ -209,7 +209,7 @@ def main():
     try:
         init_directories()
         request_file = generate_request_file()
-        process_file(request_file)
+        get_response_files(request_file)
         calculate_grades()
         print('Script successful executed')
     except Exception as e:
