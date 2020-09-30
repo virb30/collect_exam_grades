@@ -1,6 +1,6 @@
 # -*- encoding: utf-8 -*-
 
-import argparse, sys, os, re, time, glob
+import argparse, sys, os, re, time, glob, traceback
 from datetime import date, datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -10,7 +10,8 @@ from selenium.webdriver.common.by import By
 
 INPUT_FILE_LAYOUT = {
     'cpf': 2,
-    'subscription': 0
+    'subscription': 0,
+    'year': 3
 }
 
 EXAM_RESULTS_LAYOUT = {
@@ -29,29 +30,71 @@ LOG_FILE = './processed_data.log'
 
 candidates_dict = {}
 
+url = "http://sistemasenem.inep.gov.br/EnemSolicitacao/"
 
 def create_directory(directory):
     if(not os.path.exists(directory)):
         os.mkdir(directory)
 
 
-def init_directories():
+def initialize_directories():
     create_directory(BASE_DIR)
     create_directory(f'{BASE_DIR}/{DATE_DIR}')
     create_directory(f'{BASE_DIR}/{DATE_DIR}/results')
 
 
-def get_result_files():
-    directory = os.path.realpath(f'{BASE_DIR}/{DATE_DIR}')
-    return glob.glob1(directory, "*.txt")
+def get_args():
+    parser = argparse.ArgumentParser(
+        description='Extract cpf from input file and remove any non digit character')
+    parser.add_argument('input_file', metavar='input_file', type=str,
+                        help='input file path')
+    parser.add_argument('output_file', metavar='output_file', type=str,
+                        help='output file path')
+    parser.add_argument('--sep',
+                        help='Defines separator character of files (default: ;)', default=';')
+    return vars(parser.parse_args())
 
 
-def file_exists(search_file):
-    file_list = get_result_files()
-    if search_file in file_list:
-        return True
-    return False
+def read_file_lines(file):
+    lines = []
+    if(os.path.exists(file)):
+        with open(file) as read_file:
+            lines = read_file.read().splitlines()
+    return lines
 
+
+def write_lines_to_file(file, data, mode):
+    with open(file, mode=mode) as output_file:
+        output_file.write(data)
+
+
+def already_processed(cpf):
+    processed_candidates = read_file_lines(LOG_FILE)
+    return cpf in processed_candidates
+
+
+def generate_request_file(input_file, output_file, sep=';'):
+    global candidates_dict
+    lines = read_file_lines(input_file)
+    output = []
+    for line in lines:
+        line_data = line.split(sep)
+        cpf = re.sub(r'\D', '', line_data[INPUT_FILE_LAYOUT['cpf']])
+        candidates_dict[cpf] = {
+            'subscription': line_data[INPUT_FILE_LAYOUT['subscription']],
+            'year': line_data[INPUT_FILE_LAYOUT['year']]
+        }
+        if(not already_processed(cpf)):
+            output.append(cpf)
+    output_data = '\n'.join(output)
+    write_lines_to_file(file=output_file, data=output_data, mode='w')
+    return output_file
+
+
+def file_has_data(file):
+    return os.path.getsize(file) > 0
+
+# webscraping - download result files
 
 def get_webdriver():
     executable_path = r'.\\chromedriver\\chromedriver.exe'
@@ -68,103 +111,77 @@ def get_webdriver():
     return webdriver.Chrome(executable_path=executable_path, options=options)
 
 
-def open_browser(driver):
-    url = "http://sistemasenem.inep.gov.br/EnemSolicitacao/"
-    driver.get(url)
-    driver.implicitly_wait(5)
-    driver.switch_to.frame(driver.find_element_by_tag_name('iframe'))
+def login(webdriver):
+    webdriver.get(url)
+    webdriver.implicitly_wait(5)
+    webdriver.switch_to.frame(webdriver.find_element_by_tag_name('iframe'))
+    webdriver.find_element_by_id('username').send_keys(USERNAME)
+    webdriver.find_element_by_id('password').send_keys(PASSWORD)
+    webdriver.find_element_by_xpath("//input[@type='image']").click()
+    webdriver.implicitly_wait(5)
 
 
-def login(driver):
-    driver.find_element_by_id('username').send_keys(USERNAME)
-    driver.find_element_by_id('password').send_keys(PASSWORD)
-    driver.find_element_by_xpath("//input[@type='image']").click()
-    driver.implicitly_wait(5)
-
-
-def open_request_form(driver, submenu_id):
+def send_request_file(driver, submenu_id, input_file):
     driver.find_element_by_id(submenu_id).click()
+    year = driver.find_element_by_xpath(f"//div[@id='{submenu_id}']/table/tbody/tr/td[contains(@class, 'rich-pmenu-group-self-label')]").text
     driver.find_element_by_xpath(f"//div[@id='{submenu_id}']/div/table/tbody/tr/td[text()='Por arquivo (Cpf)']").click()
-
-
-def upload_request_file(driver, input_file):
     driver.find_element_by_xpath("//form[@id='formForm']/div[@id='uploadid']//input[@type='file']").send_keys(os.path.realpath(input_file))
     driver.implicitly_wait(1)
     driver.find_element_by_id('uploadid:upload1').click()
     driver.implicitly_wait(5)
+    return year
+    
+
+def last_requested_today(driver):
+    last_request = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td[@id='listaSolicitacaoAtendidas:0:j_id160']/div")
+    last_request_date = datetime.strptime(last_request.text, '%d/%m/%Y %H:%M:%S')
+    return last_request_date.date() >= date.today()
 
 
 def download_response_file(driver):
+    file_name = ''
     driver.find_element_by_xpath("//div[@id='menugroup_5']/div").click()
-    driver.implicitly_wait(1)
-    last_request = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td[@id='listaSolicitacaoAtendidas:0:j_id160']/div")
-    last_request_date = datetime.strptime(last_request.text, '%d/%m/%Y %H:%M:%S')
-    last_requested_today = last_request_date.date() >= date.today()
-    if(last_requested_today):
+    driver.implicitly_wait(5)
+    if(last_requested_today(driver)):
         download_link = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td/div/a")
         file_name = download_link.get_attribute('href').split('/')[-1]
         if(not file_exists(file_name)):
             download_link.click()
-        driver.implicitly_wait(2)
+        time.sleep(5)
+    return file_name
 
+
+def get_results_by_year(webdriver, input_file):
+    login(webdriver)
+    response_files_by_year = {}
+    submenus = [submenu.get_attribute('id') for submenu in webdriver.find_elements_by_xpath("//div[@id='menugroup_4']/div[not(@id='menugroup_4_1')]")]
+    for submenu_id in submenus:
+        year =  send_request_file(webdriver, submenu_id, input_file)
+        file = download_response_file(webdriver)
+        if(file):
+            response_files_by_year[year] = file
+        webdriver.implicitly_wait(2)
+    time.sleep(3)
+    webdriver.quit()
+    return response_files_by_year
+    
 
 def get_response_files(input_file):
-    if(os.path.getsize(input_file) > 0):
+    if(file_has_data(input_file)):
         driver = get_webdriver()
-        open_browser(driver)
-        login(driver)
-        submenus = [submenu.get_attribute('id') for submenu in driver.find_elements_by_xpath("//div[@id='menugroup_4']/div[not(@id='menugroup_4_1')]")]
-        for submenu_id in submenus:
-            open_request_form(driver, submenu_id)
-            upload_request_file(driver, input_file)
-            download_response_file(driver)
-        time.sleep(5)
-        driver.quit()
+        return get_results_by_year(driver, input_file)
+        
+
+def get_exam_results_files():
+    directory = os.path.realpath(f'{BASE_DIR}/{DATE_DIR}')
+    return glob.glob1(directory, "*.txt")
 
 
-def extract_args():
-    parser = argparse.ArgumentParser(
-        description='Extract cpf from input file and remove any non digit character')
-    parser.add_argument('input_file', metavar='input_file', type=str,
-                        help='input file path')
-    parser.add_argument('output_file', metavar='output_file', type=str,
-                        help='output file path')
-    parser.add_argument('--sep',
-                        help='Defines separator character of files (default: ;)', default=';')
-    return parser.parse_args()
-
-
-def read_processed_registers(): 
-    lines = []
-    if(os.path.exists(LOG_FILE)):
-        log_file = open(LOG_FILE, mode="r+")
-        lines = log_file.read().splitlines()
-        log_file.close()
-    return lines
-
-
-def save_processed_registers(data):
-    with open(LOG_FILE, mode="a") as log_file:
-        log_file.write(f'{data}\n')
-        log_file.close()
-
-
-def generate_request_file():
-    global candidates_dict
-    args = extract_args()
-    input_file = open(args.input_file)
-    lines = input_file.readlines()
-    processed_candidates = read_processed_registers()
-    with open(args.output_file, mode='w') as output_file:
-        for line in lines:
-            line_data = line.split(args.sep)
-            write_data = re.sub(r'\D', '', line_data[INPUT_FILE_LAYOUT['cpf']])
-            candidates_dict[write_data] = line_data[INPUT_FILE_LAYOUT['subscription']]
-            if(write_data not in processed_candidates):
-                output_file.write(f'{write_data}\n')
-        output_file.close()
-    input_file.close()
-    return args.output_file
+def file_exists(search_file):
+    file_list = get_exam_results_files()
+    if search_file in file_list:
+        return True
+    return False
 
 
 def calculate_grade_average(grades):
@@ -176,45 +193,60 @@ def calculate_essay_grade(grade):
     return round(float(grade) / 100)
 
 
-def save_result_to_file(filepath, result, cpf):
+def candidate_year(cpf, year):
     global candidates_dict
-    subscription = candidates_dict.get(cpf)    
-    with open(filepath, mode='a') as file:
-        file.write(''.join(['X'*40, subscription.zfill(6), 'X'*14, f'{result}\n']))
-        file.close()
+    candidate = candidates_dict.get(cpf)
+    return candidate.get('year') == year
+
+def grade_exists(haystack, needle):
+    return needle in haystack
+
+def save_final_results(files):    
+    result_file_date = date.today().strftime('%d%m%Y')     
+    grades_file = f'{BASE_DIR}/{DATE_DIR}/results/EXP_{result_file_date}_PON.txt'
+    essay_file = f'{BASE_DIR}/{DATE_DIR}/results/EXP_{result_file_date}_RED.txt'
+
+    grades_output = []
+    essay_output = []
+    processed_registers_output = []
+    errors_output = []
+
+    for year, filename in files.items():
+        exam_results = read_file_lines(f'{BASE_DIR}/{DATE_DIR}/{filename}')
+        for result in exam_results:
+            line_data = result.split(';')
+            cpf = line_data[EXAM_RESULTS_LAYOUT['cpf']]
+            subscription = candidates_dict.get(cpf)['subscription']
+            essay_grade = calculate_essay_grade(line_data[EXAM_RESULTS_LAYOUT['essay']])
+            grades_average = calculate_grade_average(line_data[EXAM_RESULTS_LAYOUT['grades']])
+            if(not grade_exists(processed_registers_output, cpf) and grades_average > 0 and essay_grade > 0):
+                essay_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{essay_grade}')
+                grades_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{grades_average}')
+                processed_registers_output.append(cpf)
+            else:
+                if(cpf not in errors_output):
+                    errors_output.append(cpf)
+    write_lines_to_file(file='errors.txt', data='\n'.join(errors_output), mode='a')
+    write_lines_to_file(file=grades_file, data='\n'.join(grades_output), mode='a')
+    write_lines_to_file(file=essay_file, data='\n'.join(essay_output), mode='a')
+    write_lines_to_file(file=LOG_FILE, data='\n'.join(processed_registers_output), mode='a')
 
 
-def calculate_grades():
-    export_file_date = date.today().strftime('%d%m%Y')     
-    grades_output = f'{BASE_DIR}/{DATE_DIR}/results/EXP_{export_file_date}_PON.txt'
-    essay_output = f'{BASE_DIR}/{DATE_DIR}/results/EXP_{export_file_date}_RED.txt'
-
-    result_files = get_result_files()
-    for result_file in result_files:
-        with open(f'{BASE_DIR}/{DATE_DIR}/{result_file}') as file:
-            exam_results = file.readlines()
-            for result in exam_results:
-                line_data = result.split(';')
-                cpf = line_data[EXAM_RESULTS_LAYOUT['cpf']]
-                essay_grade = calculate_essay_grade(line_data[EXAM_RESULTS_LAYOUT['essay']])
-                grades_average = calculate_grade_average(line_data[EXAM_RESULTS_LAYOUT['grades']])
-                if(grades_average > 0 and essay_grade > 0):
-                    save_result_to_file(grades_output, grades_average, cpf)
-                    save_result_to_file(essay_output, essay_grade, cpf)
-                    save_processed_registers(cpf)
-            file.close()
-        
-            
 def main():
+    start_time = time.time()
     try:
-        init_directories()
-        request_file = generate_request_file()
-        get_response_files(request_file)
-        calculate_grades()
-        print('Script successful executed')
-    except Exception as e:
-        print(e)
+        args = get_args()
+        initialize_directories()
+        request_file = generate_request_file(**args)
+        response_files = get_response_files(request_file)
+        save_final_results(response_files)        
+    except:
+        traceback.print_exc()
+    finally:
+        print(f'Script exited. Execution time: {time.time() - start_time}s')
 
 
 if __name__ == "__main__":
     main()
+
+
