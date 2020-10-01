@@ -1,7 +1,7 @@
 # -*- encoding: utf-8 -*-
 
 import argparse, sys, os, re, time, glob, traceback
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
@@ -63,7 +63,7 @@ def read_file_lines(file):
     return lines
 
 
-def write_lines_to_file(file, data, mode):
+def write_lines_to_file(file, data, mode='a'):
     with open(file, mode=mode) as output_file:
         output_file.write(data)
 
@@ -106,7 +106,7 @@ def get_webdriver():
         "profile.default_content_setting_values.automatic_downloads": 2,
     }
     options = Options()
-    options.headless = True
+    options.headless = False
     options.add_experimental_option("prefs", chrome_config)    
     return webdriver.Chrome(executable_path=executable_path, options=options)
 
@@ -128,21 +128,24 @@ def send_request_file(driver, submenu_id, input_file):
     driver.find_element_by_xpath("//form[@id='formForm']/div[@id='uploadid']//input[@type='file']").send_keys(os.path.realpath(input_file))
     driver.implicitly_wait(1)
     driver.find_element_by_id('uploadid:upload1').click()
-    driver.implicitly_wait(5)
+    time.sleep(5)
     return year
     
 
-def last_requested_today(driver):
+def last_requested_today(driver, time):
     last_request = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td[@id='listaSolicitacaoAtendidas:0:j_id160']/div")
     last_request_date = datetime.strptime(last_request.text, '%d/%m/%Y %H:%M:%S')
-    return last_request_date.date() >= date.today()
+    return last_request_date.time() >= time.time()
+
 
 
 def download_response_file(driver):
     file_name = ''
+    two_minutes = timedelta(minutes=2)
+    execution_time = datetime.now() - two_minutes
     driver.find_element_by_xpath("//div[@id='menugroup_5']/div").click()
     driver.implicitly_wait(5)
-    if(last_requested_today(driver)):
+    if(last_requested_today(driver, execution_time)):
         download_link = driver.find_element_by_xpath("//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td/div/a")
         file_name = download_link.get_attribute('href').split('/')[-1]
         if(not file_exists(file_name)):
@@ -157,6 +160,7 @@ def get_results_by_year(webdriver, input_file):
     submenus = [submenu.get_attribute('id') for submenu in webdriver.find_elements_by_xpath("//div[@id='menugroup_4']/div[not(@id='menugroup_4_1')]")]
     for submenu_id in submenus:
         year =  send_request_file(webdriver, submenu_id, input_file)
+        time.sleep(10)
         file = download_response_file(webdriver)
         if(file):
             response_files_by_year[year] = file
@@ -198,8 +202,10 @@ def candidate_year(cpf, year):
     candidate = candidates_dict.get(cpf)
     return candidate.get('year') == year
 
+
 def grade_exists(haystack, needle):
     return needle in haystack
+
 
 def save_final_results(files):    
     result_file_date = date.today().strftime('%d%m%Y')     
@@ -219,14 +225,15 @@ def save_final_results(files):
             subscription = candidates_dict.get(cpf)['subscription']
             essay_grade = calculate_essay_grade(line_data[EXAM_RESULTS_LAYOUT['essay']])
             grades_average = calculate_grade_average(line_data[EXAM_RESULTS_LAYOUT['grades']])
-            if(not grade_exists(processed_registers_output, cpf) and grades_average > 0 and essay_grade > 0):
-                essay_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{essay_grade}')
-                grades_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{grades_average}')
-                processed_registers_output.append(cpf)
+            if(grades_average > 0 and essay_grade > 0):
+                if (not grade_exists(processed_registers_output, cpf)):
+                    essay_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{essay_grade}')
+                    grades_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{grades_average}')
+                    processed_registers_output.append(cpf)  
             else:
                 if(cpf not in errors_output):
                     errors_output.append(cpf)
-    write_lines_to_file(file='errors.txt', data='\n'.join(errors_output), mode='a')
+    write_lines_to_file(file='errors.log', data='\n'.join(errors_output), mode='a')
     write_lines_to_file(file=grades_file, data='\n'.join(grades_output), mode='a')
     write_lines_to_file(file=essay_file, data='\n'.join(essay_output), mode='a')
     write_lines_to_file(file=LOG_FILE, data='\n'.join(processed_registers_output), mode='a')
