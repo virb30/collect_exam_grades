@@ -138,7 +138,6 @@ def last_requested_today(driver, time):
     return last_request_date.time() >= time.time()
 
 
-
 def download_response_file(driver):
     file_name = ''
     two_minutes = timedelta(minutes=2)
