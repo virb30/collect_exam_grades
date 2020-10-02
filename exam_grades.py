@@ -63,9 +63,9 @@ def read_file_lines(file):
     return lines
 
 
-def write_lines_to_file(file, data, mode='a'):
+def write_lines_to_file(file, data, mode='a', end='\n'):
     with open(file, mode=mode) as output_file:
-        output_file.write(data)
+        output_file.write(f'{data}{end}')
 
 
 def already_processed(cpf):
@@ -106,7 +106,7 @@ def get_webdriver():
         "profile.default_content_setting_values.automatic_downloads": 2,
     }
     options = Options()
-    options.headless = False
+    options.headless = True
     options.add_experimental_option("prefs", chrome_config)    
     return webdriver.Chrome(executable_path=executable_path, options=options)
 
@@ -224,7 +224,7 @@ def save_final_results(files):
             subscription = candidates_dict.get(cpf)['subscription']
             essay_grade = calculate_essay_grade(line_data[EXAM_RESULTS_LAYOUT['essay']])
             grades_average = calculate_grade_average(line_data[EXAM_RESULTS_LAYOUT['grades']])
-            if(grades_average > 0 and essay_grade > 0):
+            if(essay_grade > 0):
                 if (not grade_exists(processed_registers_output, cpf)):
                     essay_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{essay_grade}')
                     grades_output.append(f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{grades_average}')
