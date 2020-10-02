@@ -26,7 +26,8 @@ PASSWORD = os.environ['WS_PASSWORD']
 BASE_DIR = './downloads'
 DATE_DIR = date.today().strftime("%Y-%m-%d")
 
-LOG_FILE = './processed_data.log'
+ERRORS_FILE = './logs/errors.log'
+SUCCESS_FILE = './logs/processed_data.log'
 
 candidates_dict = {}
 
@@ -69,7 +70,7 @@ def write_lines_to_file(file, data, mode='a', end='\n'):
 
 
 def already_processed(cpf):
-    processed_candidates = read_file_lines(LOG_FILE)
+    processed_candidates = read_file_lines(SUCCESS_FILE)
     return cpf in processed_candidates
 
 
@@ -232,10 +233,10 @@ def save_final_results(files):
             else:
                 if(cpf not in errors_output):
                     errors_output.append(cpf)
-    write_lines_to_file(file='errors.log', data='\n'.join(errors_output), mode='a')
+    write_lines_to_file(file=ERRORS_FILE, data='\n'.join(errors_output), mode='a')
     write_lines_to_file(file=grades_file, data='\n'.join(grades_output), mode='a')
     write_lines_to_file(file=essay_file, data='\n'.join(essay_output), mode='a')
-    write_lines_to_file(file=LOG_FILE, data='\n'.join(processed_registers_output), mode='a')
+    write_lines_to_file(file=SUCCESS_FILE, data='\n'.join(processed_registers_output), mode='a')
 
 
 def main():
