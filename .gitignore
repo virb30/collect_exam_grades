@@ -9,5 +9,6 @@ cpf.txt
 *.txt
 2020-*
 logs/*
+.env
 
 !.gitkeep
