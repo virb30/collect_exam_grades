@@ -10,5 +10,7 @@ cpf.txt
 2020-*
 logs/*
 .env
+.idea
+.exam_grades
 
 !.gitkeep
