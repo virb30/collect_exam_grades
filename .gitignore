@@ -8,7 +8,9 @@ cpf.txt
 !*example.txt
 *.txt
 2020-*
+2021-*
 logs/*
 .env
-
+.enem
+__pycache__
 !.gitkeep

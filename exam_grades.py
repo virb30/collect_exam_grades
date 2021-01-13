@@ -1,4 +1,4 @@
-# -*- encoding: utf-8 -*-
+# -*- encoding: utf8 -*-
 
 import argparse, sys, os, re, time, glob, traceback
 from datetime import date, datetime, timedelta
@@ -64,13 +64,13 @@ def get_args():
 def read_file_lines(file):
     lines = []
     if(os.path.exists(file)):
-        with open(file) as read_file:
+        with open(file, encoding='utf8') as read_file:
             lines = read_file.read().splitlines()
     return lines
 
 
 def write_lines_to_file(file, data, mode='a', end='\n'):
-    with open(file, mode=mode) as output_file:
+    with open(file, mode=mode, encoding='utf8') as output_file:
         output_file.write(f'{data}{end}')
 
 
@@ -113,13 +113,13 @@ def get_webdriver():
     }
     options = Options()
     options.headless = True
-    options.add_experimental_option("prefs", chrome_config)    
+    options.add_experimental_option("prefs", chrome_config)
+    options.add_argument('--disable-backgrounding-occluded-windows')
     return webdriver.Chrome(executable_path=executable_path, options=options)
 
 
 def login(webdriver):
     webdriver.get(url)
-    webdriver.implicitly_wait(5)
     webdriver.switch_to.frame(webdriver.find_element_by_tag_name('iframe'))
     webdriver.find_element_by_id('username').send_keys(USERNAME)
     webdriver.find_element_by_id('password').send_keys(PASSWORD)
