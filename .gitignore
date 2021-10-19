@@ -8,8 +8,9 @@ cpf.txt
 !*example.txt
 *.txt
 2020-*
-2021-*
+2021*
 logs/*
+assets/*
 .env
 .enem
 __pycache__
