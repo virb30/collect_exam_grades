@@ -1,5 +1,6 @@
 secrets.txt
 downloads/*
+drivers
 chromedriver
 geckodriver
 *.log
@@ -15,3 +16,5 @@ assets/*
 .enem
 __pycache__
 !.gitkeep
+build
+dist

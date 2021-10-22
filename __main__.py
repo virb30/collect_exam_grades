@@ -1,8 +1,12 @@
+import os
 import time
 import traceback
 import argparse
 
-from .exam_grades import generate_request_file, get_response_files, initialize_directories, save_final_results
+from exam_grades import ENEMScrap
+
+USERNAME = os.environ['WS_USERNAME']
+PASSWORD = os.environ['WS_PASSWORD']
 
 
 def get_args():
@@ -20,10 +24,12 @@ def get_args():
 start_time = time.time()
 try:
     args = get_args()
-    initialize_directories()
-    request_file = generate_request_file(**args)
-    response_files = get_response_files(request_file)
-    save_final_results(response_files)
+
+    scrap = ENEMScrap(username=USERNAME, password=PASSWORD)
+    scrap.initialize_directories()
+    request_file = scrap.generate_request_file(**args)
+    response_files = scrap.get_response_files(request_file)
+    save_final_results = scrap.save_final_results(response_files)
 except:
     traceback.print_exc()
 finally:
