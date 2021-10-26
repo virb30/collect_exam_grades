@@ -83,8 +83,8 @@ class ENEMScrap:
             output_file.write(f'{data}{end}')
 
     def already_processed(self, cpf):
-        file = ENEMScrap.open_file(SUCCESS_FILE)
-        processed_candidates = ENEMScrap.read_file_lines(file)
+        # file = ENEMScrap.open_file(SUCCESS_FILE)
+        # processed_candidates = ENEMScrap.read_file_lines(file)
         return cpf in self.processed_candidates
 
     def generate_request_file(self, input_file, output_file, sep=';'):
