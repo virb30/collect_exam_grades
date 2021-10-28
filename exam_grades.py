@@ -1,5 +1,3 @@
-# -*- encoding: utf8 -*-
-
 import os
 import re
 import time
@@ -54,8 +52,7 @@ class ENEMScrap:
         self.username = username
         self.password = password
 
-        self.processed_candidates = ENEMScrap.read_file_lines(
-            ENEMScrap.open_file(SUCCESS_FILE))
+        self.processed_candidates = ENEMScrap.read_file_lines(SUCCESS_FILE)
 
     @staticmethod
     def create_directory(directory):
@@ -66,11 +63,6 @@ class ENEMScrap:
         ENEMScrap.create_directory(DOWNLOADS_DIR)
         ENEMScrap.create_directory(DATE_DIR)
         ENEMScrap.create_directory(RESULTS_DIR)
-
-    @staticmethod
-    def open_file(file_path, mode='r', encoding='utf8'):
-        if(os.path.exists(file_path)):
-            return open(file_path, mode=mode, encoding=encoding)
 
     @staticmethod
     def read_file_lines(file):
@@ -85,13 +77,12 @@ class ENEMScrap:
             output_file.write(f'{data}{end}')
 
     def already_processed(self, cpf):
-        # file = ENEMScrap.open_file(SUCCESS_FILE)
-        # processed_candidates = ENEMScrap.read_file_lines(file)
         return cpf in self.processed_candidates
 
     def generate_request_file(self, input_file, output_file, sep=';'):
         global candidates_dict
         file = Path(input_file)
+        output_file = Path(output_file)
         lines = ENEMScrap.read_file_lines(file)
         output = []
         for line in lines:
@@ -101,16 +92,14 @@ class ENEMScrap:
                 'subscription': line_data[INPUT_FILE_LAYOUT['subscription']],
                 'year': line_data[INPUT_FILE_LAYOUT['year']]
             }
-            if(not self.already_processed(cpf)):
+            if not self.already_processed(cpf):
                 output.append(cpf)
         output_data = '\n'.join(output)
         self.write_lines_to_file(file=output_file, data=output_data, mode='w')
         return output_file
 
-    def file_has_data(self, file):
-        return os.path.getsize(file) > 0
-
-    # webscraping - download result files
+    def has_data(self, file):
+        return file.stat().st_size > 0
 
     def get_webdriver(self):
         executable_path = WEBDRIVER
@@ -166,11 +155,11 @@ class ENEMScrap:
         execution_time = datetime.now() - two_minutes
         driver.find_element_by_xpath("//div[@id='menugroup_5']/div").click()
         driver.implicitly_wait(10)
-        if(self.last_requested_today(driver, execution_time)):
+        if self.last_requested_today(driver, execution_time):
             download_link = driver.find_element_by_xpath(
                 "//table[@id='listaSolicitacaoAtendidas']//tbody[@id='listaSolicitacaoAtendidas:tb']//tr[contains(@class,'rich-table-firstrow')]//td/div/a")
             file_name = download_link.get_attribute('href').split('/')[-1]
-            if(not self.file_exists(file_name)):
+            if not self.file_exists(file_name):
                 download_link.click()
             time.sleep(5)
         return file_name
@@ -184,7 +173,7 @@ class ENEMScrap:
             year = self.send_request_file(webdriver, submenu_id, input_file)
             time.sleep(10)
             file = self.download_response_file(webdriver)
-            if(file):
+            if file:
                 response_files_by_year[year] = file
             webdriver.implicitly_wait(2)
         time.sleep(3)
@@ -192,7 +181,7 @@ class ENEMScrap:
         return response_files_by_year
 
     def get_response_files(self, input_file):
-        if(self.file_has_data(input_file)):
+        if self.has_data(input_file):
             driver = self.get_webdriver()
             return self.get_results_by_year(driver, input_file)
 
@@ -220,8 +209,20 @@ class ENEMScrap:
         candidate = candidates_dict.get(cpf)
         return candidate.get('year') == year
 
+    def get_line(self, data, separator=';'):
+        return data.split(separator)
+
     def grade_exists(self, haystack, needle):
         return needle in haystack
+
+    def get_cpf(self, data):
+        return data[EXAM_RESULTS_LAYOUT['cpf']]
+
+    def get_essay_grade(self, data):
+        return data[EXAM_RESULTS_LAYOUT['essay']]
+
+    def get_grades(self, data):
+        return data[EXAM_RESULTS_LAYOUT['grades']]
 
     def save_final_results(self, files):
         result_file_date = date.today().strftime('%d%m%Y')
@@ -233,27 +234,31 @@ class ENEMScrap:
         processed_registers_output = []
         errors_output = []
 
-        for year, filename in files.items():
+        for _, filename in files.items():
             file = DATE_DIR / filename
             exam_results = ENEMScrap.read_file_lines(file)
             for result in exam_results:
-                line_data = result.split(';')
-                cpf = line_data[EXAM_RESULTS_LAYOUT['cpf']]
+                line_data = self.get_line(result)
+                cpf = self.get_cpf(line_data)
                 subscription = candidates_dict.get(cpf)['subscription']
-                essay_grade = ENEMScrap.calculate_essay_grade(
-                    line_data[EXAM_RESULTS_LAYOUT['essay']])
-                grades_average = ENEMScrap.calculate_grade_average(
-                    line_data[EXAM_RESULTS_LAYOUT['grades']])
-                if(essay_grade > 0):
-                    if (not self.grade_exists(processed_registers_output, cpf)):
+
+                raw_essay_grade = self.get_essay_grade(line_data)
+                essay_grade = ENEMScrap.calculate_essay_grade(raw_essay_grade)
+
+                raw_grades = self.get_grades(line_data)
+                grades_average = ENEMScrap.calculate_grade_average(raw_grades)
+
+                if essay_grade > 0:
+                    if not self.grade_exists(processed_registers_output, cpf):
                         essay_output.append(
                             f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{essay_grade}')
                         grades_output.append(
                             f'{"X" * 40}{subscription.zfill(6)}{"X" * 14}{grades_average}')
                         processed_registers_output.append(cpf)
                 else:
-                    if(cpf not in errors_output):
+                    if cpf not in errors_output:
                         errors_output.append(cpf)
+
         self.write_lines_to_file(
             file=ERRORS_FILE, data='\n'.join(errors_output), mode='a')
         self.write_lines_to_file(
