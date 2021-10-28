@@ -59,8 +59,8 @@ class ENEMScrap:
 
     @staticmethod
     def create_directory(directory):
-        if(not os.path.exists(directory)):
-            os.mkdir(directory)
+        if not directory.exists():
+            directory.mkdir()
 
     def initialize_directories(self):
         ENEMScrap.create_directory(DOWNLOADS_DIR)
@@ -75,11 +75,13 @@ class ENEMScrap:
     @staticmethod
     def read_file_lines(file):
         lines = []
-        lines = file.read().splitlines()
+        assert file.exists()
+        with file.open(mode='r', encoding='utf8') as f:
+            lines = f.read().splitlines()
         return lines
 
     def write_lines_to_file(self, file, data, mode='a', end='\n'):
-        with open(file, mode=mode, encoding='utf8') as output_file:
+        with file.open(mode=mode, encoding='utf8') as output_file:
             output_file.write(f'{data}{end}')
 
     def already_processed(self, cpf):
@@ -89,7 +91,7 @@ class ENEMScrap:
 
     def generate_request_file(self, input_file, output_file, sep=';'):
         global candidates_dict
-        file = ENEMScrap.open_file(input_file)
+        file = Path(input_file)
         lines = ENEMScrap.read_file_lines(file)
         output = []
         for line in lines:
@@ -223,8 +225,8 @@ class ENEMScrap:
 
     def save_final_results(self, files):
         result_file_date = date.today().strftime('%d%m%Y')
-        grades_file = str(RESULTS_DIR / f'EXP_{result_file_date}_PON.txt')
-        essay_file = str(RESULTS_DIR / f'EXP_{result_file_date}_RED.txt')
+        grades_file = RESULTS_DIR / f'EXP_{result_file_date}_PON.txt'
+        essay_file = RESULTS_DIR / f'EXP_{result_file_date}_RED.txt'
 
         grades_output = []
         essay_output = []
@@ -232,7 +234,7 @@ class ENEMScrap:
         errors_output = []
 
         for year, filename in files.items():
-            file = ENEMScrap.open_file(str(RESULTS_DIR / filename))
+            file = DATE_DIR / filename
             exam_results = ENEMScrap.read_file_lines(file)
             for result in exam_results:
                 line_data = result.split(';')
