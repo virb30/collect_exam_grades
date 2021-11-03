@@ -99,24 +99,25 @@ class frm_main:
             self.timer()
             self.run_button.config(state=DISABLED)
             self.run_button.update()
-            scrap.initialize_directories()
             args = {
                 'input_file': self.file_path,
                 'output_file': 'cpf.txt',
                 'sep': separator
             }
 
-            request_file = scrap.generate_request_file(**args)
-            response_files = scrap.get_response_files(request_file)
-            scrap.save_final_results(response_files)
+            self.results_dir = scrap.run(**args)
 
-            self.results_dir = scrap.get_results_dir()
+            # request_file = scrap.generate_request_file(**args)
+            # response_files = scrap.get_response_files(request_file)
+            # scrap.save_final_results(response_files)
+
+            # self.results_dir = scrap.get_results_dir()
 
             tk.Button(self.row3, text='Resultados',
                       command=self.open_results_dir).pack(side=LEFT)
 
             self.retries = 1
-        except:
+        except Exception as err:
             self.retries += 1
             if self.retries >= MAX_RETRIES:
                 messagebox.showerror(

@@ -33,12 +33,12 @@ DOWNLOADS_DIR = BASE_DIR / 'downloads'
 DATE_DIR = DOWNLOADS_DIR / date.today().strftime("%Y-%m-%d")
 RESULTS_DIR = DATE_DIR / 'results'
 
-ERRORS_FILE = BASE_DIR / 'logs' / 'errors.log'
-SUCCESS_FILE = BASE_DIR / 'logs' / 'processed_data.log'
+LOGS_DIR = BASE_DIR / 'logs'
+
+ERRORS_FILE = LOGS_DIR / 'errors.log'
+SUCCESS_FILE = LOGS_DIR / 'processed_data.log'
 
 WEBDRIVER = BASE_DIR / 'drivers' / 'chromedriver.exe'
-
-candidates_dict = {}
 
 url = "http://sistemasenem.inep.gov.br/EnemSolicitacao/"
 
@@ -47,12 +47,25 @@ class ENEMScrap:
     username = ''
     password = ''
     processed_candidates = []
+    candidates_dict = {}
 
     def __init__(self, username='', password=''):
         self.username = username
         self.password = password
 
-        self.processed_candidates = ENEMScrap.read_file_lines(SUCCESS_FILE)
+    def run(self, input_file, output_file, sep=';'):
+        self.initialize_directories()
+        self.generate_request_file(input_file, output_file, sep)
+        self.get_response_files()
+        self.save_final_results()
+        return self.get_results_dir()
+
+    def get_processed_candidates(self):
+        try:
+            self.processed_candidates = ENEMScrap.read_file_lines(SUCCESS_FILE)
+        except:
+            SUCCESS_FILE.touch()
+        return self.processed_candidates
 
     @staticmethod
     def create_directory(directory):
@@ -60,9 +73,9 @@ class ENEMScrap:
             directory.mkdir()
 
     def initialize_directories(self):
-        ENEMScrap.create_directory(DOWNLOADS_DIR)
-        ENEMScrap.create_directory(DATE_DIR)
-        ENEMScrap.create_directory(RESULTS_DIR)
+        directories = [DOWNLOADS_DIR, DATE_DIR, RESULTS_DIR, LOGS_DIR]
+        for directory in directories:
+            ENEMScrap.create_directory(directory)
 
     @staticmethod
     def read_file_lines(file):
@@ -80,23 +93,23 @@ class ENEMScrap:
         return cpf in self.processed_candidates
 
     def generate_request_file(self, input_file, output_file, sep=';'):
-        global candidates_dict
         file = Path(input_file)
-        output_file = Path(output_file)
+        self.request_file = Path(output_file)
         lines = ENEMScrap.read_file_lines(file)
         output = []
         for line in lines:
             line_data = line.split(sep)
             cpf = re.sub(r'\D', '', line_data[INPUT_FILE_LAYOUT['cpf']])
-            candidates_dict[cpf] = {
+            self.candidates_dict[cpf] = {
                 'subscription': line_data[INPUT_FILE_LAYOUT['subscription']],
                 'year': line_data[INPUT_FILE_LAYOUT['year']]
             }
             if not self.already_processed(cpf):
                 output.append(cpf)
         output_data = '\n'.join(output)
-        self.write_lines_to_file(file=output_file, data=output_data, mode='w')
-        return output_file
+        self.write_lines_to_file(
+            file=self.request_file, data=output_data, mode='w')
+        return self.request_file
 
     def has_data(self, file):
         return file.stat().st_size > 0
@@ -164,26 +177,27 @@ class ENEMScrap:
             time.sleep(5)
         return file_name
 
-    def get_results_by_year(self, webdriver, input_file):
+    def get_results_by_year(self):
+        webdriver = self.get_webdriver()
         self.login(webdriver)
-        response_files_by_year = {}
+        self.response_files_by_year = {}
         submenus = [submenu.get_attribute('id') for submenu in webdriver.find_elements_by_xpath(
             "//div[@id='menugroup_4']/div[not(@id='menugroup_4_1')]")]
         for submenu_id in submenus:
-            year = self.send_request_file(webdriver, submenu_id, input_file)
+            year = self.send_request_file(
+                webdriver, submenu_id, self.request_file)
             time.sleep(10)
             file = self.download_response_file(webdriver)
             if file:
-                response_files_by_year[year] = file
+                self.response_files_by_year[year] = file
             webdriver.implicitly_wait(2)
         time.sleep(3)
         webdriver.quit()
-        return response_files_by_year
+        return self.response_files_by_year
 
-    def get_response_files(self, input_file):
-        if self.has_data(input_file):
-            driver = self.get_webdriver()
-            return self.get_results_by_year(driver, input_file)
+    def get_response_files(self):
+        if self.has_data(self.request_file):
+            return self.get_results_by_year()
 
     def get_exam_results_files(self):
         directory = str(DATE_DIR)
@@ -205,8 +219,7 @@ class ENEMScrap:
         return round(float(grade) / 100)
 
     def candidate_year(self, cpf, year):
-        global candidates_dict
-        candidate = candidates_dict.get(cpf)
+        candidate = self.candidates_dict.get(cpf)
         return candidate.get('year') == year
 
     def get_line(self, data, separator=';'):
@@ -224,7 +237,8 @@ class ENEMScrap:
     def get_grades(self, data):
         return data[EXAM_RESULTS_LAYOUT['grades']]
 
-    def save_final_results(self, files):
+    def save_final_results(self):
+        files = self.response_files_by_year
         result_file_date = date.today().strftime('%d%m%Y')
         grades_file = RESULTS_DIR / f'EXP_{result_file_date}_PON.txt'
         essay_file = RESULTS_DIR / f'EXP_{result_file_date}_RED.txt'
@@ -240,7 +254,7 @@ class ENEMScrap:
             for result in exam_results:
                 line_data = self.get_line(result)
                 cpf = self.get_cpf(line_data)
-                subscription = candidates_dict.get(cpf)['subscription']
+                subscription = self.candidates_dict.get(cpf)['subscription']
 
                 raw_essay_grade = self.get_essay_grade(line_data)
                 essay_grade = ENEMScrap.calculate_essay_grade(raw_essay_grade)

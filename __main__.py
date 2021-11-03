@@ -26,10 +26,11 @@ try:
     args = get_args()
 
     scrap = ENEMScrap(username=USERNAME, password=PASSWORD)
-    scrap.initialize_directories()
-    request_file = scrap.generate_request_file(**args)
-    response_files = scrap.get_response_files(request_file)
-    save_final_results = scrap.save_final_results(response_files)
+    scrap.run(**args)
+    # scrap.initialize_directories()
+    # request_file = scrap.generate_request_file(**args)
+    # response_files = scrap.get_response_files(request_file)
+    # scrap.save_final_results(response_files)
 except:
     traceback.print_exc()
 finally:
