@@ -106,13 +106,6 @@ class frm_main:
             }
 
             self.results_dir = scrap.run(**args)
-
-            # request_file = scrap.generate_request_file(**args)
-            # response_files = scrap.get_response_files(request_file)
-            # scrap.save_final_results(response_files)
-
-            # self.results_dir = scrap.get_results_dir()
-
             tk.Button(self.row3, text='Resultados',
                       command=self.open_results_dir).pack(side=LEFT)
 
