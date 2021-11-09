@@ -81,12 +81,12 @@ class ENEMScrap:
     def read_file_lines(file):
         lines = []
         assert file.exists()
-        with file.open(mode='r', encoding='utf8') as f:
+        with file.open(mode='r') as f:
             lines = f.read().splitlines()
         return lines
 
     def write_lines_to_file(self, file, data, mode='a', end='\n'):
-        with file.open(mode=mode, encoding='utf8') as output_file:
+        with file.open(mode=mode) as output_file:
             output_file.write(f'{data}{end}')
 
     def already_processed(self, cpf):
