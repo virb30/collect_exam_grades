@@ -55,12 +55,13 @@ class ENEMScrap:
 
     def run(self, input_file, output_file, sep=';'):
         self.initialize_directories()
+        self.load_processed_candidates()
         self.generate_request_file(input_file, output_file, sep)
         self.get_response_files()
         self.save_final_results()
         return self.get_results_dir()
 
-    def get_processed_candidates(self):
+    def load_processed_candidates(self):
         try:
             self.processed_candidates = ENEMScrap.read_file_lines(SUCCESS_FILE)
         except:
